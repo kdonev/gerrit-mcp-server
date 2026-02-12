@@ -50,6 +50,11 @@ make the server ready to run.
 ./build-gerrit.sh
 ```
 
+**Windows:**
+```bat
+build-gerrit.bat
+```
+
 ### 3. Configure the Server
 
 You will need to create a `gerrit_config.json` file inside the
@@ -78,6 +83,13 @@ To run the server as a persistent background process, use the `server.sh` script
     ```bash
     ./server.sh stop
     ```
+
+**Windows:**
+```bat
+server.bat start
+server.bat status
+server.bat stop
+```
 
 For on-demand STDIO mode, please see the **[Gemini CLI Setup Guide](docs/gemini-cli.md)**.
 
