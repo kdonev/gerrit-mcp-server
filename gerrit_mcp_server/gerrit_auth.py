@@ -27,11 +27,12 @@ def _get_auth_for_gob(config: Dict[str, Any]) -> List[str]:
 
 def _get_auth_for_http_basic(config: Dict[str, Any]) -> List[str]:
     """Returns the command for HTTP basic authentication."""
-    username = config.get("username")
-    auth_token = config.get("auth_token")
+    username = config.get("username") or config.get("user")
+    auth_token = config.get("auth_token") or config.get("password")
     if not username or not auth_token:
         raise ValueError(
-            "For 'http_basic' authentication, both 'username' and 'auth_token' must be configured."
+            "For 'http_basic' authentication, both 'username' (or 'user') and "
+            "'auth_token' (or 'password') must be configured."
         )
     return ["curl", "--user", f"{username}:{auth_token}", "-L"]
 

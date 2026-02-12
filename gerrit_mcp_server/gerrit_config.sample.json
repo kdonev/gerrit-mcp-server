@@ -7,7 +7,7 @@
       "authentication": {
         "type": "http_basic",
         "username": "your-username",
-        "auth_token": "your-auth-token"
+        "password": "your-password-or-token"
       }
     },
     {

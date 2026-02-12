@@ -22,7 +22,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 # The command to run your server.
 # IMPORTANT: This should not include redirection (>) or backgrounding (&).
 # The script handles that automatically.
-SERVER_COMMAND=".venv/bin/uvicorn gerrit_mcp_server.main:app --host localhost --port 6322"
+SERVER_COMMAND=".venv/bin/uvicorn gerrit_mcp_server.main:app --host 127.0.0.1 --port 6322"
 
 # The file to store the Process ID (PID) of the running server.
 PID_FILE="$SCRIPT_DIR/server.pid"

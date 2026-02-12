@@ -100,7 +100,8 @@ except Exception as e:
     }
 
 # --- Initialize FastMCP Server ---
-mcp = FastMCP("gerrit")
+# Use JSON responses to avoid SSE-only clients failing Accept header checks.
+mcp = FastMCP("gerrit", json_response=True)
 
 # --- Session State ---
 
@@ -154,13 +155,11 @@ def _normalize_gerrit_url(url: str, gerrit_hosts: List[Dict[str, Any]]) -> str:
                 normalized_url = internal_url
             break  # Found a match, so we can exit the loop.
 
-    # Ensure https, then strip trailing slash
+    # Ensure a scheme, then strip trailing slash.
     if not (
         normalized_url.startswith("http://") or normalized_url.startswith("https://")
     ):
         normalized_url = "https://" + normalized_url
-    elif normalized_url.startswith("http://"):
-        normalized_url = normalized_url.replace("http://", "https://")
 
     return normalized_url.rstrip("/")
 

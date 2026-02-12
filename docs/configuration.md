@@ -93,11 +93,12 @@ services.
 ### 3. `http_basic` (Not Recommended)
 
 This is the standard and most common method for authenticating with a Gerrit
-instance's REST API. It uses a generated HTTP password or token.
+instance's REST API. It uses HTTP Basic auth with a generated HTTP password or
+token.
 
 *   **`type`**: `"http_basic"`
-*   **`username`**: Your Gerrit username.
-*   **`auth_token`**: Your Gerrit HTTP password/token. You can usually generate this from your Gerrit user settings page under "HTTP Credentials - Obtain Password".
+*   **`username`** (or `user`): Your Gerrit/proxy username.
+*   **`password`** (or `auth_token`): Your Gerrit HTTP password/token or proxy password. You can usually generate this from your Gerrit user settings page under "HTTP Credentials - Obtain Password".
 
 **Example:**
 ```json
@@ -107,7 +108,7 @@ instance's REST API. It uses a generated HTTP password or token.
   "authentication": {
     "type": "http_basic",
     "username": "your-username",
-    "auth_token": "your-auth-token"
+    "password": "your-http-password-or-token"
   }
 }
 ```
