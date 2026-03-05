@@ -108,5 +108,93 @@ class TestGerritUrlsDispatcher(unittest.TestCase):
             )
 
 
+class TestRequiresAuthenticatedPrefix(unittest.TestCase):
+
+    def test_returns_true_for_http_basic(self):
+        """Tests that http_basic auth requires the /a/ prefix."""
+        config = {
+            "gerrit_hosts": [
+                {
+                    "name": "Public",
+                    "external_url": "https://public-gerrit.com/",
+                    "authentication": {
+                        "type": "http_basic",
+                        "username": "user",
+                        "password": "pass",
+                    },
+                }
+            ]
+        }
+        self.assertTrue(
+            gerrit_urls.requires_authenticated_prefix(
+                "https://public-gerrit.com", config
+            )
+        )
+
+    def test_returns_false_for_gob_curl(self):
+        """Tests that gob_curl auth does not require the /a/ prefix."""
+        config = {
+            "gerrit_hosts": [
+                {
+                    "name": "Fuchsia",
+                    "external_url": "https://fuchsia-review.googlesource.com/",
+                    "authentication": {"type": "gob_curl"},
+                }
+            ]
+        }
+        self.assertFalse(
+            gerrit_urls.requires_authenticated_prefix(
+                "https://fuchsia-review.googlesource.com", config
+            )
+        )
+
+    def test_returns_false_for_git_cookies(self):
+        """Tests that git_cookies auth does not require the /a/ prefix."""
+        config = {
+            "gerrit_hosts": [
+                {
+                    "name": "Fuchsia",
+                    "external_url": "https://fuchsia-review.googlesource.com/",
+                    "authentication": {
+                        "type": "git_cookies",
+                        "gitcookies_path": "~/.gitcookies",
+                    },
+                }
+            ]
+        }
+        self.assertFalse(
+            gerrit_urls.requires_authenticated_prefix(
+                "https://fuchsia-review.googlesource.com", config
+            )
+        )
+
+    def test_returns_false_for_unknown_host(self):
+        """Tests that an unknown host returns False."""
+        config = {"gerrit_hosts": []}
+        self.assertFalse(
+            gerrit_urls.requires_authenticated_prefix(
+                "https://unknown-gerrit.com", config
+            )
+        )
+
+    def test_matches_internal_url(self):
+        """Tests that the function matches on internal_url."""
+        config = {
+            "gerrit_hosts": [
+                {
+                    "name": "Public",
+                    "internal_url": "http://gerrit.internal.com",
+                    "external_url": "https://gerrit.external.com/",
+                    "authentication": {"type": "http_basic", "username": "u", "password": "p"},
+                }
+            ]
+        }
+        self.assertTrue(
+            gerrit_urls.requires_authenticated_prefix(
+                "http://gerrit.internal.com", config
+            )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
