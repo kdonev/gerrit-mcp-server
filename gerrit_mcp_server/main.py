@@ -515,6 +515,34 @@ async def get_file_diff(
     return [{"type": "text", "text": diff_text}]
 
 
+async def _fetch_change_comments_json(
+    change_id: str, base_url: str, config: Dict[str, Any]
+) -> str:
+    """Fetches the raw published comments JSON for a change."""
+    url = _build_gerrit_api_url(base_url, f"changes/{change_id}/comments", config)
+    return await run_curl([url], base_url)
+
+
+def _review_post_succeeded(result_str: str) -> bool:
+    """Checks whether Gerrit accepted a review POST request."""
+    return (
+        '"done": true' in result_str
+        or '"labels"' in result_str
+        or '"comments"' in result_str
+    )
+
+
+def _find_comment_by_id(
+    comments_by_file: Dict[str, List[Dict[str, Any]]], parent_comment_id: str
+) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Locates a comment by its Gerrit comment ID."""
+    for current_file_path, comments in comments_by_file.items():
+        for comment in comments:
+            if comment.get("id") == parent_comment_id:
+                return current_file_path, comment
+    return None, None
+
+
 @mcp.tool()
 async def list_change_comments(
     change_id: str, gerrit_base_url: Optional[str] = None
@@ -525,8 +553,7 @@ async def list_change_comments(
     config = load_gerrit_config()
     gerrit_hosts = config.get("gerrit_hosts", [])
     base_url = _normalize_gerrit_url(_get_gerrit_base_url(gerrit_base_url), gerrit_hosts)
-    url = _build_gerrit_api_url(base_url, f"changes/{change_id}/comments", config)
-    result_json_str = await run_curl([url], base_url)
+    result_json_str = await _fetch_change_comments_json(change_id, base_url, config)
     try:
         comments_by_file = json.loads(result_json_str)
     except json.JSONDecodeError:
@@ -548,7 +575,11 @@ async def list_change_comments(
             timestamp = comment.get("updated", "No date")
             message = comment["message"]
             status = "UNRESOLVED" if comment.get("unresolved", False) else "RESOLVED"
-            output += f"L{line}: [{author}] ({timestamp}) - {status}\n"
+            comment_id = comment.get("id", "UNKNOWN")
+            reply_bits = [f"comment_id={comment_id}"]
+            if comment.get("in_reply_to"):
+                reply_bits.append(f"in_reply_to={comment['in_reply_to']}")
+            output += f"L{line}: [{author}] ({timestamp}) - {status} {' '.join(reply_bits)}\n"
             output += f"  {message}\n"
 
     if not found_comments:
@@ -1195,7 +1226,7 @@ async def post_review_comment(
     try:
         result_str = await run_curl(args, base_url)
         # A successful response should contain the updated review information
-        if '"done": true' in result_str or '"labels"' in result_str or '"comments"' in result_str:
+        if _review_post_succeeded(result_str):
             return [
                 {
                     "type": "text",
@@ -1213,6 +1244,86 @@ async def post_review_comment(
         with open(LOG_FILE_PATH, "a") as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error posting comment to CL {change_id}: {e}\n"
+            )
+        raise e
+
+
+@mcp.tool()
+async def reply_to_comment(
+    change_id: str,
+    file_path: str,
+    parent_comment_id: str,
+    message: str,
+    unresolved: bool = True,
+    gerrit_base_url: Optional[str] = None,
+):
+    """
+    Posts a reply to an existing published comment in a CL.
+    """
+    config = load_gerrit_config()
+    gerrit_hosts = config.get("gerrit_hosts", [])
+    base_url = _normalize_gerrit_url(_get_gerrit_base_url(gerrit_base_url), gerrit_hosts)
+
+    result_json_str = await _fetch_change_comments_json(change_id, base_url, config)
+    try:
+        comments_by_file = json.loads(result_json_str)
+    except json.JSONDecodeError:
+        return [
+            {
+                "type": "text",
+                "text": f"Failed to parse JSON response from Gerrit while validating parent comment. Raw response:\n{result_json_str}",
+            }
+        ]
+
+    found_file_path, _ = _find_comment_by_id(comments_by_file, parent_comment_id)
+    if found_file_path is None:
+        return [
+            {
+                "type": "text",
+                "text": f"Failed to post reply. Comment {parent_comment_id} was not found on CL {change_id}.",
+            }
+        ]
+    if found_file_path != file_path:
+        return [
+            {
+                "type": "text",
+                "text": f"Failed to post reply. Comment {parent_comment_id} belongs to file {found_file_path}, not {file_path}.",
+            }
+        ]
+
+    url = _build_gerrit_api_url(base_url, f"changes/{change_id}/revisions/current/review", config)
+    payload = {
+        "comments": {
+            file_path: [
+                {
+                    "in_reply_to": parent_comment_id,
+                    "message": message,
+                    "unresolved": unresolved,
+                }
+            ]
+        }
+    }
+    args = _create_post_args(url, payload)
+
+    try:
+        result_str = await run_curl(args, base_url)
+        if _review_post_succeeded(result_str):
+            return [
+                {
+                    "type": "text",
+                    "text": f"Successfully posted reply to comment {parent_comment_id} on CL {change_id} in file {file_path}.",
+                }
+            ]
+        return [
+            {
+                "type": "text",
+                "text": f"Failed to post reply. Response: {result_str}",
+            }
+        ]
+    except Exception as e:
+        with open(LOG_FILE_PATH, "a") as log_file:
+            log_file.write(
+                f"[gerrit-mcp-server] Error posting reply to comment {parent_comment_id} on CL {change_id}: {e}\n"
             )
         raise e
 

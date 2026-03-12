@@ -183,6 +183,7 @@ async def test_list_change_comments(mock_run_curl):
     mock_run_curl.return_value = json.dumps({
         "file1.txt": [
             {
+                "id": "c1",
                 "line": 10,
                 "author": {"name": "user1@example.com"},
                 "message": "Comment 1",
@@ -190,6 +191,8 @@ async def test_list_change_comments(mock_run_curl):
                 "updated": "2025-07-15T11:00:00Z",
             },
             {
+                "id": "c2",
+                "in_reply_to": "c1",
                 "line": 12,
                 "author": {"name": "user2@example.com"},
                 "message": "Comment 2",
@@ -199,6 +202,7 @@ async def test_list_change_comments(mock_run_curl):
         ],
         "file2.txt": [
             {
+                "id": "c3",
                 "line": 5,
                 "author": {"name": "user1@example.com"},
                 "message": "Comment 3",
@@ -214,12 +218,12 @@ async def test_list_change_comments(mock_run_curl):
     text = result[0]["text"]
     assert "Comments for CL 123" in text
     assert "File: file1.txt" in text
-    assert "L10: [user1@example.com] (2025-07-15T11:00:00Z) - UNRESOLVED" in text
+    assert "L10: [user1@example.com] (2025-07-15T11:00:00Z) - UNRESOLVED comment_id=c1" in text
     assert "Comment 1" in text
-    assert "L12: [user2@example.com] (2025-07-15T11:05:00Z) - RESOLVED" in text
+    assert "L12: [user2@example.com] (2025-07-15T11:05:00Z) - RESOLVED comment_id=c2 in_reply_to=c1" in text
     assert "Comment 2" in text
     assert "File: file2.txt" in text
-    assert "L5: [user1@example.com] (2025-07-15T11:10:00Z) - UNRESOLVED" in text
+    assert "L5: [user1@example.com] (2025-07-15T11:10:00Z) - UNRESOLVED comment_id=c3" in text
     assert "Comment 3" in text
 
 @pytest.mark.asyncio
@@ -228,6 +232,7 @@ async def test_list_change_comments_no_unresolved(mock_run_curl):
     mock_run_curl.return_value = json.dumps({
         "file1.txt": [
             {
+                "id": "c2",
                 "line": 12,
                 "author": {"name": "user2@example.com"},
                 "message": "Comment 2",
@@ -241,7 +246,7 @@ async def test_list_change_comments_no_unresolved(mock_run_curl):
     )
     text = result[0]["text"]
     assert "Comments for CL 123" in text
-    assert "L12: [user2@example.com] (2025-07-15T11:05:00Z) - RESOLVED" in text
+    assert "L12: [user2@example.com] (2025-07-15T11:05:00Z) - RESOLVED comment_id=c2" in text
 
 @pytest.mark.asyncio
 async def test_list_change_comments_json_decode_error(mock_run_curl):
@@ -510,4 +515,73 @@ async def test_post_review_comment_with_labels(mock_run_curl):
     actual_payload = json.loads(actual_payload_str)
     
     assert actual_payload == expected_payload
+
+@pytest.mark.asyncio
+async def test_reply_to_comment_success(mock_run_curl):
+    """Tests posting a reply to an existing comment."""
+    mock_run_curl.side_effect = [
+        json.dumps({
+            "file1.txt": [
+                {
+                    "id": "c1",
+                    "line": 10,
+                    "author": {"name": "user1@example.com"},
+                    "message": "Comment 1",
+                    "unresolved": True,
+                    "updated": "2025-07-15T11:00:00Z",
+                }
+            ]
+        }),
+        ')]}\'\\n{"done": true}',
+    ]
+
+    result = await main.reply_to_comment(
+        gerrit_base_url="https://fuchsia-review.googlesource.com",
+        change_id="123",
+        file_path="file1.txt",
+        parent_comment_id="c1",
+        message="Reply text",
+        unresolved=False,
+    )
+
+    assert "Successfully posted reply to comment c1 on CL 123 in file file1.txt." in result[0]["text"]
+
+    curl_args = mock_run_curl.call_args_list[1][0][0]
+    data_index = curl_args.index("--data")
+    actual_payload = json.loads(curl_args[data_index + 1])
+    assert actual_payload == {
+        "comments": {
+            "file1.txt": [{
+                "in_reply_to": "c1",
+                "message": "Reply text",
+                "unresolved": False,
+            }]
+        }
+    }
+
+@pytest.mark.asyncio
+async def test_reply_to_comment_wrong_file(mock_run_curl):
+    """Tests rejecting replies when the parent comment belongs to another file."""
+    mock_run_curl.return_value = json.dumps({
+        "file1.txt": [
+            {
+                "id": "c1",
+                "line": 10,
+                "author": {"name": "user1@example.com"},
+                "message": "Comment 1",
+                "unresolved": True,
+                "updated": "2025-07-15T11:00:00Z",
+            }
+        ]
+    })
+
+    result = await main.reply_to_comment(
+        gerrit_base_url="https://fuchsia-review.googlesource.com",
+        change_id="123",
+        file_path="file2.txt",
+        parent_comment_id="c1",
+        message="Reply text",
+    )
+
+    assert "Failed to post reply. Comment c1 belongs to file file1.txt, not file2.txt." in result[0]["text"]
 

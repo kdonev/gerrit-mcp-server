@@ -210,9 +210,47 @@
         "description": "The content of the comment.",
         "required": true
       },
+      "unresolved": {
+        "type": "boolean",
+        "description": "Whether to leave the comment thread unresolved. Defaults to true."
+      },
       "labels": {
         "type": "object",
         "description": "A dictionary of labels to apply to the review (e.g., {'Verified': 1})."
+      }
+    }
+  },
+  "reply_to_comment": {
+    "description": "Posts a reply to an existing published comment in a CL.",
+    "parameters": {
+      "gerrit_base_url": {
+        "type": "string",
+        "description": "The base URL of the Gerrit instance. This is configured via the gerrit_config.json file or the GERRIT_BASE_URL environment variable.",
+        "required": false
+      },
+      "change_id": {
+        "type": "string",
+        "description": "The numeric change ID.",
+        "required": true
+      },
+      "file_path": {
+        "type": "string",
+        "description": "The file that owns the parent comment thread.",
+        "required": true
+      },
+      "parent_comment_id": {
+        "type": "string",
+        "description": "The Gerrit comment ID to reply to.",
+        "required": true
+      },
+      "message": {
+        "type": "string",
+        "description": "The content of the reply.",
+        "required": true
+      },
+      "unresolved": {
+        "type": "boolean",
+        "description": "Whether the thread should remain unresolved after the reply. Defaults to true."
       }
     }
   }

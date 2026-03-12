@@ -209,6 +209,90 @@ async def test_post_review_comment_failure(mock_run_curl):
     result = await main.post_review_comment("123", "file.py", 10, "test comment")
     assert "Failed to post comment" in result[0]["text"]
 
+@pytest.mark.asyncio
+async def test_reply_to_comment_success(mock_run_curl):
+    """Tests posting a reply with a validated parent comment."""
+    mock_run_curl.side_effect = [
+        json.dumps({
+            "file.py": [
+                {
+                    "id": "parent-1",
+                    "line": 10,
+                    "author": {"name": "user@example.com"},
+                    "message": "Original comment",
+                    "unresolved": True,
+                    "updated": "2025-07-15T10:00:00Z",
+                }
+            ]
+        }),
+        '{"comments": {}}',
+    ]
+
+    result = await main.reply_to_comment(
+        "123",
+        "file.py",
+        "parent-1",
+        "reply text",
+        unresolved=False,
+    )
+
+    assert "Successfully posted reply to comment parent-1 on CL 123 in file file.py." in result[0]["text"]
+
+    args, _ = mock_run_curl.call_args_list[1]
+    curl_args = args[0]
+    data_index = curl_args.index("--data")
+    request_body = json.loads(curl_args[data_index + 1])
+    assert request_body == {
+        "comments": {
+            "file.py": [
+                {
+                    "in_reply_to": "parent-1",
+                    "message": "reply text",
+                    "unresolved": False,
+                }
+            ]
+        }
+    }
+
+@pytest.mark.asyncio
+async def test_reply_to_comment_missing_parent(mock_run_curl):
+    """Tests rejecting a reply when the parent comment cannot be found."""
+    mock_run_curl.return_value = json.dumps({"file.py": []})
+
+    result = await main.reply_to_comment(
+        "123",
+        "file.py",
+        "missing-id",
+        "reply text",
+    )
+
+    assert "Failed to post reply. Comment missing-id was not found on CL 123." in result[0]["text"]
+
+@pytest.mark.asyncio
+async def test_reply_to_comment_wrong_file(mock_run_curl):
+    """Tests rejecting a reply when the parent comment belongs to another file."""
+    mock_run_curl.return_value = json.dumps({
+        "other.py": [
+            {
+                "id": "parent-1",
+                "line": 10,
+                "author": {"name": "user@example.com"},
+                "message": "Original comment",
+                "unresolved": True,
+                "updated": "2025-07-15T10:00:00Z",
+            }
+        ]
+    })
+
+    result = await main.reply_to_comment(
+        "123",
+        "file.py",
+        "parent-1",
+        "reply text",
+    )
+
+    assert "Failed to post reply. Comment parent-1 belongs to file other.py, not file.py." in result[0]["text"]
+
 # --- Edge Case Tests ---
 
 @pytest.mark.asyncio

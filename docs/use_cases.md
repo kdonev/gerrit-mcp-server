@@ -20,6 +20,7 @@ Here are a few examples of how you can use the Gerrit MCP Server with a language
 |                   | "Suggest reviewers for CL 12345 who know about the 'auth' module."                                                | `suggest_reviewers`                                   |
 | **Review Helper**   | "List the comments on CL 12345."                                                                                  | `list_change_comments`                                |
 |                   | "Post a comment on CL 12345, file 'utils.py', line 20: 'Add a test for this case.'"                               | `post_review_comment`                                 |
+|                   | "Reply to comment 'TvcXrmjM' on CL 12345 in file 'utils.py': 'I added the test in the latest patch set.'"          | `reply_to_comment`                                    |
 | **Advanced**        | "Revert CL 12345 with the message 'Broke the build'."                                                             | `revert_change`                                       |
 |                   | "What other changes would be submitted with CL 67890?"                                                            | `changes_submitted_together`                          |
 |                   | "Create a new change in project 'test-project', branch 'dev', with subject 'Test new feature'."                   | `create_change`                                       |
