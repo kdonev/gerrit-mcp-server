@@ -7,7 +7,8 @@
       "stdio"
     ],
     "env": {
-      "PYTHONPATH": "%%REPO_ROOT%%/gerrit/"
+      "PYTHONPATH": "%%REPO_ROOT%%/gerrit/",
+      "PYTHONIOENCODING": "utf-8"
     }
   }
 }

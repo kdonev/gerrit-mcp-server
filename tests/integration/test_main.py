@@ -227,6 +227,38 @@ async def test_list_change_comments(mock_run_curl):
     assert "Comment 3" in text
 
 @pytest.mark.asyncio
+async def test_list_change_comments_multilingual(mock_run_curl):
+    """Tests listing comments containing non-ASCII text."""
+    mock_run_curl.return_value = json.dumps({
+        "file1.txt": [
+            {
+                "id": "c1",
+                "line": 8,
+                "author": {"name": "user1@example.com"},
+                "message": "Коментар на кирилица",
+                "unresolved": True,
+                "updated": "2025-07-15T11:00:00Z",
+            },
+            {
+                "id": "c2",
+                "line": 9,
+                "author": {"name": "user2@example.com"},
+                "message": "修正済みのコメント",
+                "unresolved": False,
+                "updated": "2025-07-15T11:05:00Z",
+            },
+        ]
+    }, ensure_ascii=False)
+
+    result = await main.list_change_comments(
+        gerrit_base_url="https://fuchsia-review.googlesource.com", change_id="123"
+    )
+
+    text = result[0]["text"]
+    assert "Коментар на кирилица" in text
+    assert "修正済みのコメント" in text
+
+@pytest.mark.asyncio
 async def test_list_change_comments_no_unresolved(mock_run_curl):
     """Tests listing comments when all are resolved."""
     mock_run_curl.return_value = json.dumps({

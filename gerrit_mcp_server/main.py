@@ -29,12 +29,35 @@ from gerrit_mcp_server.sort_util import sort_changes_by_date
 from mcp.server.fastmcp import FastMCP
 import mcp.types as types
 
+
+def _configure_text_stream_encoding(stream: Any) -> None:
+    """Best-effort UTF-8 configuration for text streams on Windows stdio."""
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8", errors="replace")
+
+
+def _configure_stdio_encoding() -> None:
+    """Ensures stdio uses UTF-8 so multilingual tool output is printable."""
+    _configure_text_stream_encoding(sys.stdout)
+    _configure_text_stream_encoding(sys.stderr)
+
+
+_configure_stdio_encoding()
+
+
 # --- Load Gerrit details from JSON ---
 # Define paths outside the try block to ensure they are always initialized.
 PKG_PATH = Path(__file__).parent
 SERVER_ROOT_PATH = PKG_PATH.parent
 LOG_FILE_PATH = SERVER_ROOT_PATH / "server.log"
 CONFIG_FILE_PATH = PKG_PATH / "gerrit_config.json"
+TEXT_FILE_ENCODING = "utf-8"
+
+
+def _open_log_file():
+    """Opens the server log with a deterministic Unicode-safe encoding."""
+    return open(LOG_FILE_PATH, "a", encoding=TEXT_FILE_ENCODING)
 
 
 def load_gerrit_config() -> Dict[str, Any]:
@@ -54,7 +77,7 @@ def load_gerrit_config() -> Dict[str, Any]:
             "Refer to the README.md for more details on the configuration options."
         )
     try:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding=TEXT_FILE_ENCODING) as f:
             config = json.load(f)
             default_url = config.get("default_gerrit_base_url")
             if default_url:
@@ -85,10 +108,10 @@ def load_gerrit_config() -> Dict[str, Any]:
 
 
 try:
-    with open(PKG_PATH / "gerrit_details.json", "r") as f:
+    with open(PKG_PATH / "gerrit_details.json", "r", encoding=TEXT_FILE_ENCODING) as f:
         gerrit_details = json.load(f)
     # This file is not used in this implementation, but kept for pattern consistency
-    with open(PKG_PATH / "gerrit_command_argument_defs.json", "r") as f:
+    with open(PKG_PATH / "gerrit_command_argument_defs.json", "r", encoding=TEXT_FILE_ENCODING) as f:
         gerrit_arg_defs = json.load(f)
 except Exception as e:
     print(
@@ -180,7 +203,7 @@ async def run_curl(args: List[str], gerrit_base_url: str) -> str:
     """Executes a curl command and returns the output."""
     config = load_gerrit_config()
     command = get_curl_command_for_gerrit_url(gerrit_base_url, config) + args
-    with open(LOG_FILE_PATH, "a") as log_file:
+    with _open_log_file() as log_file:
         log_file.write(f"[gerrit-mcp-server] Executing: {" ".join(command)}\n")
 
     process = await asyncio.create_subprocess_exec(
@@ -193,14 +216,14 @@ async def run_curl(args: List[str], gerrit_base_url: str) -> str:
     stdout_str = stdout.decode()
     stderr_str = stderr.decode()
 
-    with open(LOG_FILE_PATH, "a") as log_file:
+    with _open_log_file() as log_file:
         log_file.write("[gerrit-mcp-server] curl command finished.\n")
         log_file.write(f"[gerrit-mcp-server] stdout:\n{stdout_str}\n")
         log_file.write(f"[gerrit-mcp-server] stderr:\n{stderr_str}\n")
 
     if process.returncode != 0:
         error_msg = f"curl command failed with exit code {process.returncode}.\nSTDERR:\n{stderr_str}"
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(f"[gerrit-mcp-server] {error_msg}\n")
         raise Exception(error_msg)
 
@@ -209,7 +232,7 @@ async def run_curl(args: List[str], gerrit_base_url: str) -> str:
     if stdout_str.startswith(")]}'"):
         stdout_str = stdout_str[4:]
 
-    with open(LOG_FILE_PATH, "a") as log_file:
+    with _open_log_file() as log_file:
         log_file.write(f"[gerrit-mcp-server] JSON to parse:\n{stdout_str}\n")
 
     return stdout_str.strip()
@@ -450,7 +473,7 @@ async def get_commit_message(
             }
         ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error getting commit message for CL {change_id}: {e}\n"
             )
@@ -641,7 +664,7 @@ async def add_reviewer(
             }
         ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error adding reviewer to CL {change_id}: {e}\n"
             )
@@ -673,7 +696,7 @@ async def set_ready_for_review(
             ]
         return [{"type": "text", "text": f"CL {change_id} is now ready for review."}]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error setting CL {change_id} as ready for review: {e}\n"
             )
@@ -707,7 +730,7 @@ async def set_work_in_progress(
             ]
         return [{"type": "text", "text": f"CL {change_id} is now a work-in-progress."}]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error setting CL {change_id} as work-in-progress: {e}\n"
             )
@@ -755,7 +778,7 @@ async def revert_change(
             }
         ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(f"[gerrit-mcp-server] Error reverting CL {change_id}: {e}\n")
         raise e
 
@@ -800,7 +823,7 @@ async def revert_submission(
             }
         ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error reverting submission for CL {change_id}: {e}\n"
             )
@@ -1112,7 +1135,7 @@ async def abandon_change(
             }
         ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error abandoning CL {change_id}: {e}\n"
             )
@@ -1241,7 +1264,7 @@ async def post_review_comment(
                 }
             ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error posting comment to CL {change_id}: {e}\n"
             )
@@ -1321,7 +1344,7 @@ async def reply_to_comment(
             }
         ]
     except Exception as e:
-        with open(LOG_FILE_PATH, "a") as log_file:
+        with _open_log_file() as log_file:
             log_file.write(
                 f"[gerrit-mcp-server] Error posting reply to comment {parent_comment_id} on CL {change_id}: {e}\n"
             )
@@ -1336,6 +1359,7 @@ def cli_main(argv: List[str]):
     """
     # If 'stdio' is an argument, run in stdio mode and bypass HTTP server logic.
     if "stdio" in argv:
+        _configure_stdio_encoding()
         mcp.run(transport="stdio")
     else:
         # Otherwise, run as a normal HTTP server.

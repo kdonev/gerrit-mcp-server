@@ -16,7 +16,8 @@ import pytest
 import asyncio
 import os
 import json
-from unittest.mock import patch, AsyncMock
+from pathlib import Path
+from unittest.mock import patch, AsyncMock, Mock
 from gerrit_mcp_server import main
 
 # --- Fixtures ---
@@ -101,6 +102,41 @@ def test_get_gerrit_base_url_with_no_env_var(mock_load_config):
         }
         assert main._get_gerrit_base_url() == "https://fuchsia-review.googlesource.com"
 
+def test_configure_text_stream_encoding_uses_utf8():
+    """Tests that text streams are reconfigured to UTF-8 when supported."""
+    stream = Mock()
+
+    main._configure_text_stream_encoding(stream)
+
+    stream.reconfigure.assert_called_once_with(encoding="utf-8", errors="replace")
+
+def test_configure_text_stream_encoding_is_noop_without_reconfigure():
+    """Tests that stream encoding configuration is skipped for unsupported streams."""
+    class StreamWithoutReconfigure:
+        pass
+
+    main._configure_text_stream_encoding(StreamWithoutReconfigure())
+
+def test_configure_stdio_encoding_updates_stdout_and_stderr():
+    """Tests that both stdio streams are configured."""
+    stdout = Mock()
+    stderr = Mock()
+
+    with patch.object(main.sys, "stdout", stdout), patch.object(main.sys, "stderr", stderr):
+        main._configure_stdio_encoding()
+
+    stdout.reconfigure.assert_called_once_with(encoding="utf-8", errors="replace")
+    stderr.reconfigure.assert_called_once_with(encoding="utf-8", errors="replace")
+
+def test_cli_main_stdio_configures_utf8_before_run():
+    """Tests that stdio mode reconfigures encoding before starting the MCP server."""
+    with patch("gerrit_mcp_server.main._configure_stdio_encoding") as mock_configure, \
+         patch.object(main.mcp, "run") as mock_run:
+        main.cli_main(["main.py", "stdio"])
+
+    mock_configure.assert_called_once_with()
+    mock_run.assert_called_once_with(transport="stdio")
+
 @pytest.mark.asyncio
 async def test_run_curl_timeout(mock_exec, mock_load_config):
     """Tests that a TimeoutError is raised when the curl command times out."""
@@ -124,6 +160,27 @@ async def test_run_curl_large_output(mock_exec, mock_load_config):
 
     result = await main.run_curl(["https://example.com"], "https://example.com")
     assert result == large_output
+
+@pytest.mark.asyncio
+async def test_run_curl_logs_unicode_output_with_utf8(mock_exec, mock_load_config):
+    """Tests that curl output containing non-ASCII text can be logged on Windows."""
+    mock_load_config.return_value = {
+        "gerrit_hosts": [{"external_url": "https://example.com", "authentication": {"type": "gob_curl"}}]
+    }
+    unicode_output = ')]}\'\n{"message":"Коментар на кирилица"}'
+    mock_exec.return_value.communicate.return_value = (unicode_output.encode("utf-8"), b"")
+    mock_exec.return_value.returncode = 0
+    log_dir = Path("build") / "pytest-logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "unicode-server.log"
+    if log_path.exists():
+        log_path.unlink()
+
+    with patch.object(main, "LOG_FILE_PATH", log_path):
+        result = await main.run_curl(["https://example.com"], "https://example.com")
+
+    assert result == '{"message":"Коментар на кирилица"}'
+    assert "Коментар на кирилица" in log_path.read_text(encoding="utf-8")
 
 @pytest.mark.asyncio
 async def test_run_curl_non_zero_exit(mock_exec, mock_load_config):

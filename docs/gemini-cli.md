@@ -61,7 +61,8 @@ with the absolute path to your `gerrit-mcp-server` project directory.
         "stdio"
       ],
       "env": {
-        "PYTHONPATH": "<path_to_project>/"
+        "PYTHONPATH": "<path_to_project>/",
+        "PYTHONIOENCODING": "utf-8"
       }
     }
   }

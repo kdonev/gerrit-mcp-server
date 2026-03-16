@@ -10,7 +10,8 @@
         "stdio"
       ],
       "env": {
-        "PYTHONPATH": "${extensionPath}"
+        "PYTHONPATH": "${extensionPath}",
+        "PYTHONIOENCODING": "utf-8"
       }
     }
   }
