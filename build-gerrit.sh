@@ -35,6 +35,12 @@ echo -e "\n${YELLOW}Setting up the Python environment for the Gerrit MCP server.
 # Create a build directory to indicate the server is "installed"
 mkdir -p "build"
 
+# Keep installer caches local to the repo so the build does not depend on
+# user-specific cache permissions.
+export PIP_CACHE_DIR="$(pwd)/build/pip-cache"
+export UV_CACHE_DIR="$(pwd)/build/uv-cache"
+mkdir -p "${PIP_CACHE_DIR}" "${UV_CACHE_DIR}"
+
 # Create a virtual environment
 echo "Creating virtual environment in ${VENV_DIR}..."
 if ! python3 -m venv "${VENV_DIR}"; then
